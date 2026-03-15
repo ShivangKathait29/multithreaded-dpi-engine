@@ -29,6 +29,7 @@ struct PcapPacketHeader {
     uint32_t orig_len;       // Actual length of packet
 };
 
+
 // Represents a single captured packet
 struct RawPacket {
     PcapPacketHeader header;
