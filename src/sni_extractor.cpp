@@ -195,9 +195,18 @@ std::optional<std::string> HTTPHostExtractor::extract(const uint8_t* payload, si
                 std::string host(reinterpret_cast<const char*>(payload + start), end - start);
                 
                 // Remove port if present
-                size_t colon_pos = host.find(':');
-                if (colon_pos != std::string::npos) {
-                    host = host.substr(0, colon_pos);
+                if (!host.empty() && host[0] == '[') {
+                    // IPv6 literal: [address]:port
+                    size_t bracket_pos = host.find(']');
+                    if (bracket_pos != std::string::npos) {
+                        host = host.substr(0, bracket_pos + 1);
+                    }
+                } else {
+                    // IPv4 or hostname: strip :port
+                    size_t colon_pos = host.find(':');
+                    if (colon_pos != std::string::npos) {
+                        host = host.substr(0, colon_pos);
+                    }
                 }
                 
                 return host;
