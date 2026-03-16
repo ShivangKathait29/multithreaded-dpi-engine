@@ -54,7 +54,9 @@ std::optional<std::string> SNIExtractor::extract(const uint8_t* payload, size_t 
     // Byte 0: Handshake type (already checked)
     // Bytes 1-3: Length
     uint32_t handshake_length = readUint24BE(payload + offset + 1);
-    offset += 4;
+
+    const size_t handshake_end = offset + handshake_length;
+    if (handshake_end < offset || handshake_end > length) return std::nullopt;
     
     // Client Hello body
     // Bytes 0-1: Client version
@@ -81,11 +83,12 @@ std::optional<std::string> SNIExtractor::extract(const uint8_t* payload, size_t 
     // Extensions
     if (offset + 2 > length) return std::nullopt;
     uint16_t extensions_length = readUint16BE(payload + offset);
+
     offset += 2;
     
     size_t extensions_end = offset + extensions_length;
-    if (extensions_end > length) {
-        extensions_end = length;  // Truncated, but try to parse anyway
+    if (extensions_end < offset || extensions_end > handshake_end) {
+        return std::nullopt;
     }
     
     // Parse extensions to find SNI
@@ -131,8 +134,10 @@ std::vector<std::pair<uint16_t, std::string>> SNIExtractor::extractExtensions(
     
     std::vector<std::pair<uint16_t, std::string>> extensions;
     
-    // Similar parsing logic as extract(), but collect all extensions
-    // ... (abbreviated for brevity)
+    // Implement the same validated TLS ClientHello walk as extract(),
+    // then push each extension as {type, raw-bytes-as-hex-or-string}.
+    // If not implemented yet, consider removing this API from the header
+    // until behavior is complete.
     
     return extensions;
 }
@@ -229,12 +234,15 @@ std::optional<std::string> DNSExtractor::extractQuery(const uint8_t* payload, si
     // DNS query starts at byte 12
     size_t offset = 12;
     std::string domain;
+    bool terminated = false;
     
     while (offset < length) {
         uint8_t label_length = payload[offset];
         
         if (label_length == 0) {
             // End of domain name
+            terminated = true;
+            offset += 1; // consume terminator
             break;
         }
         
@@ -253,6 +261,8 @@ std::optional<std::string> DNSExtractor::extractQuery(const uint8_t* payload, si
         offset += label_length;
     }
     
+    if (!terminated) return std::nullopt;
+    if (offset + 4 > length) return std::nullopt; // QTYPE + QCLASS
     return domain.empty() ? std::nullopt : std::optional<std::string>(domain);
 }
 
@@ -266,13 +276,17 @@ bool QUICSNIExtractor::isQUICInitial(const uint8_t* payload, size_t length) {
     // QUIC long header starts with 1 bit set (form bit)
     // and the type should be Initial (0x00)
     uint8_t first_byte = payload[0];
+    // Header Form(1) + Fixed Bit(1) must both be set for QUIC long packets
+    if ((first_byte & 0xC0) != 0xC0) return false;
+    // Long packet type bits 5..4: Initial = 0b00
+    if ((first_byte & 0x30) != 0x00) return false;
     
-    // Long header form
-    if ((first_byte & 0x80) == 0) return false;
-    
-    // Check for QUIC version (bytes 1-4)
-    // Common versions: 0x00000001 (v1), 0xff000000+ (drafts)
-    // We'll be lenient here
+    const uint32_t version =
+        (static_cast<uint32_t>(payload[1]) << 24) |
+        (static_cast<uint32_t>(payload[2]) << 16) |
+        (static_cast<uint32_t>(payload[3]) << 8)  |
+        static_cast<uint32_t>(payload[4]);
+    if (version == 0) return false; // version negotiation packet
     
     return true;
 }
@@ -288,10 +302,11 @@ std::optional<std::string> QUICSNIExtractor::extract(const uint8_t* payload, siz
     
     // Search for TLS Client Hello pattern within the QUIC packet
     // Look for the handshake type byte followed by SNI extension
-    for (size_t i = 0; i + 50 < length; i++) {
+    for (size_t i = 5; i + 50 < length; i++) {
         if (payload[i] == 0x01) {  // Client Hello handshake type
             // Try to extract SNI starting from here
-            auto result = SNIExtractor::extract(payload + i - 5, length - i + 5);
+            const size_t tls_start = i - 5;
+            auto result = SNIExtractor::extract(payload + tls_start, length - tls_start);
             if (result) return result;
         }
     }
