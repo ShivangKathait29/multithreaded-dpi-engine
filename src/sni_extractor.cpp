@@ -54,13 +54,14 @@ std::optional<std::string> SNIExtractor::extract(const uint8_t* payload, size_t 
     // Byte 0: Handshake type (already checked)
     // Bytes 1-3: Length
     uint32_t handshake_length = readUint24BE(payload + offset + 1);
+    offset += 4;  // Skip handshake header: type (1) + length (3)
 
     const size_t handshake_end = offset + handshake_length;
-    if (handshake_end < offset || handshake_end > length) return std::nullopt;
+    if (handshake_end > length) return std::nullopt;
     
     // Client Hello body
     // Bytes 0-1: Client version
-    offset += 2;
+    offset += 2;  // Skip client version
     
     // Bytes 2-33: Random (32 bytes)
     offset += 32;
