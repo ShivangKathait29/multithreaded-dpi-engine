@@ -115,10 +115,14 @@ std::vector<AppType> RuleManager::getBlockedApps() const {
 void RuleManager::blockDomain(const std::string& domain) {
     std::unique_lock<std::shared_mutex> lock(domain_mutex_);
     
+    std::string lower_domain = domain;
+    std::transform(lower_domain.begin(), lower_domain.end(), lower_domain.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    
     if (domain.find('*') != std::string::npos) {
-        domain_patterns_.push_back(domain);
+        domain_patterns_.push_back(lower_domain);
     } else {
-        blocked_domains_.insert(domain);
+        blocked_domains_.insert(lower_domain);
     }
     
     std::cout << "[RuleManager] Blocked domain: " << domain << std::endl;
@@ -127,13 +131,17 @@ void RuleManager::blockDomain(const std::string& domain) {
 void RuleManager::unblockDomain(const std::string& domain) {
     std::unique_lock<std::shared_mutex> lock(domain_mutex_);
     
+    std::string lower_domain = domain;
+    std::transform(lower_domain.begin(), lower_domain.end(), lower_domain.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    
     if (domain.find('*') != std::string::npos) {
-        auto it = std::find(domain_patterns_.begin(), domain_patterns_.end(), domain);
+        auto it = std::find(domain_patterns_.begin(), domain_patterns_.end(), lower_domain);
         if (it != domain_patterns_.end()) {
             domain_patterns_.erase(it);
         }
     } else {
-        blocked_domains_.erase(domain);
+        blocked_domains_.erase(lower_domain);
     }
     
     std::cout << "[RuleManager] Unblocked domain: " << domain << std::endl;
