@@ -16,7 +16,11 @@ ConnectionTracker::ConnectionTracker(int fp_id, size_t max_connections)
 
 Connection* ConnectionTracker::getOrCreateConnection(const FiveTuple& tuple) {
     auto it = connections_.find(tuple);
+    if (it != connections_.end()) {
+        return &it->second;
+    }
     
+    it = connections_.find(tuple.reverse());
     if (it != connections_.end()) {
         return &it->second;
     }
@@ -91,6 +95,9 @@ void ConnectionTracker::blockConnection(Connection* conn) {
 
 void ConnectionTracker::closeConnection(const FiveTuple& tuple) {
     auto it = connections_.find(tuple);
+    if (it == connections_.end()) {
+        it = connections_.find(tuple.reverse());
+    }
     if (it != connections_.end()) {
         it->second.state = ConnectionState::CLOSED;
     }
@@ -127,12 +134,18 @@ std::vector<Connection> ConnectionTracker::getAllConnections() const {
 }
 
 size_t ConnectionTracker::getActiveCount() const {
-    return connections_.size();
+    size_t active = 0;
+    for (const auto& pair : connections_) {
+        if (pair.second.state != ConnectionState::CLOSED) {
+            active++;
+        }
+    }
+    return active;
 }
 
 ConnectionTracker::TrackerStats ConnectionTracker::getStats() const {
     TrackerStats stats;
-    stats.active_connections = connections_.size();
+    stats.active_connections = getActiveCount();
     stats.total_connections_seen = total_seen_;
     stats.classified_connections = classified_count_;
     stats.blocked_connections = blocked_count_;
@@ -173,7 +186,7 @@ GlobalConnectionTable::GlobalConnectionTable(size_t num_fps) {
 
 void GlobalConnectionTable::registerTracker(int fp_id, ConnectionTracker* tracker) {
     std::unique_lock<std::shared_mutex> lock(mutex_);
-    if (fp_id < static_cast<int>(trackers_.size())) {
+    if (fp_id >= 0 && fp_id < static_cast<int>(trackers_.size())) {
         trackers_[fp_id] = tracker;
     }
 }
@@ -196,9 +209,11 @@ GlobalConnectionTable::GlobalStats GlobalConnectionTable::getGlobalStats() const
         
         // Collect app distribution
         tracker->forEach([&](const Connection& conn) {
-            stats.app_distribution[conn.app_type]++;
-            if (!conn.sni.empty()) {
-                domain_counts[conn.sni]++;
+            if (conn.state != ConnectionState::CLOSED) {
+                stats.app_distribution[conn.app_type]++;
+                if (!conn.sni.empty()) {
+                    domain_counts[conn.sni]++;
+                }
             }
         });
     }

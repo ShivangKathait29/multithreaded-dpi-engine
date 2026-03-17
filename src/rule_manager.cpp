@@ -309,7 +309,11 @@ bool RuleManager::loadRules(const std::string& filename) {
         
         // Process based on section
         if (current_section == "[BLOCKED_IPS]") {
-            blockIP(line);
+            try {
+                blockIP(line);
+            } catch (const std::exception&) {
+                // Skip malformed IP entries
+            }
         } else if (current_section == "[BLOCKED_APPS]") {
             // Convert string back to AppType
             for (int i = 0; i < static_cast<int>(AppType::APP_COUNT); i++) {
