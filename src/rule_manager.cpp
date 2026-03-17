@@ -14,15 +14,25 @@ uint32_t RuleManager::parseIP(const std::string& ip) {
     uint32_t result = 0;
     int octet = 0;
     int shift = 0;
+    int octet_count = 0;
     
     for (char c : ip) {
         if (c == '.') {
+            if (octet > 255) {
+                throw std::invalid_argument("Invalid IP: octet > 255");
+            }
             result |= (octet << shift);
             shift += 8;
             octet = 0;
+            octet_count++;
         } else if (c >= '0' && c <= '9') {
             octet = octet * 10 + (c - '0');
+        } else {
+            throw std::invalid_argument("Invalid IP: unexpected character");
         }
+    }
+    if (octet > 255 || octet_count != 3) {
+        throw std::invalid_argument("Invalid IP format");
     }
     result |= (octet << shift);
     
@@ -152,16 +162,17 @@ bool RuleManager::domainMatchesPattern(const std::string& domain, const std::str
 bool RuleManager::isDomainBlocked(const std::string& domain) const {
     std::shared_lock<std::shared_mutex> lock(domain_mutex_);
     
-    // Check exact match
-    if (blocked_domains_.count(domain) > 0) {
-        return true;
-    }
-    
-    // Check patterns
+    // Normalize to lowercase for case-insensitive matching
     std::string lower_domain = domain;
     std::transform(lower_domain.begin(), lower_domain.end(), lower_domain.begin(),
                    [](unsigned char c) { return std::tolower(c); });
     
+    // Check exact match
+    if (blocked_domains_.count(lower_domain) > 0) {
+        return true;
+    }
+    
+    // Check patterns
     for (const auto& pattern : domain_patterns_) {
         std::string lower_pattern = pattern;
         std::transform(lower_pattern.begin(), lower_pattern.end(), lower_pattern.begin(),
@@ -310,7 +321,14 @@ bool RuleManager::loadRules(const std::string& filename) {
         } else if (current_section == "[BLOCKED_DOMAINS]") {
             blockDomain(line);
         } else if (current_section == "[BLOCKED_PORTS]") {
-            blockPort(static_cast<uint16_t>(std::stoi(line)));
+            try {
+                int port = std::stoi(line);
+                if (port >= 0 && port <= 65535) {
+                    blockPort(static_cast<uint16_t>(port));
+                }
+            } catch (const std::exception&) {
+                // Skip malformed port entries
+            }
         }
     }
     

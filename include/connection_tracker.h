@@ -76,6 +76,8 @@ public:
 private:
     int fp_id_;
     size_t max_connections_;
+
+    mutable std::shared_mutex mutex_;
     
     // Connection table
     // Note: FiveTuple hash ensures consistent mapping, so we don't need
@@ -100,6 +102,9 @@ public:
     
     // Register an FP's tracker
     void registerTracker(int fp_id, ConnectionTracker* tracker);
+
+    // Unregister an FP's tracker (call before destroying tracker)
+    void unregisterTracker(int fp_id);
     
     // Get aggregated statistics
     struct GlobalStats {
