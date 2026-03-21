@@ -13,7 +13,7 @@ FastPathProcessor::FastPathProcessor(int fp_id,
                                      RuleManager* rule_manager,
                                      PacketOutputCallback output_callback)
     : fp_id_(fp_id),
-      input_queue_(10000),
+      input_queue_(std::make_shared<ThreadSafeQueue<PacketJob>>(10000)),
       conn_tracker_(fp_id),
       rule_manager_(rule_manager),
       output_callback_(std::move(output_callback)) {
@@ -36,7 +36,7 @@ void FastPathProcessor::stop() {
     if (!running_) return;
     
     running_ = false;
-    input_queue_.shutdown();
+    if (input_queue_) input_queue_->shutdown();
     
     if (thread_.joinable()) {
         thread_.join();
@@ -49,7 +49,7 @@ void FastPathProcessor::stop() {
 void FastPathProcessor::run() {
     while (running_) {
         // Get packet from input queue
-        auto job_opt = input_queue_.popWithTimeout(std::chrono::milliseconds(100));
+        auto job_opt = input_queue_->popWithTimeout(std::chrono::milliseconds(100));
         
         if (!job_opt) {
             // Periodically cleanup stale connections
@@ -110,6 +110,11 @@ PacketAction FastPathProcessor::processPacket(PacketJob& job) {
 void FastPathProcessor::inspectPayload(PacketJob& job, Connection* conn) {
     if (job.payload_length == 0 || job.payload_offset >= job.data.size()) {
         return;
+    }
+    
+    size_t available = job.data.size() - job.payload_offset;
+    if (job.payload_length > available) {
+        job.payload_length = available;
     }
     
     const uint8_t* payload = job.data.data() + job.payload_offset;

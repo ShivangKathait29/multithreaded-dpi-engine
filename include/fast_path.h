@@ -51,7 +51,7 @@ public:
     void stop();
     
     // Get input queue (for LB to push packets)
-    ThreadSafeQueue<PacketJob>& getInputQueue() { return input_queue_; }
+    std::shared_ptr<ThreadSafeQueue<PacketJob>> getInputQueue() { return input_queue_; }
     
     // Get connection tracker (for reporting)
     ConnectionTracker& getConnectionTracker() { return conn_tracker_; }
@@ -78,7 +78,7 @@ private:
     int fp_id_;
     
     // Input queue from LB
-    ThreadSafeQueue<PacketJob> input_queue_;
+    std::shared_ptr<ThreadSafeQueue<PacketJob>> input_queue_;
     
     // Connection tracker (per-FP, no sharing needed)
     ConnectionTracker conn_tracker_;
@@ -147,13 +147,13 @@ public:
     FastPathProcessor& getFP(int id) { return *fps_[id]; }
     
     // Get FP input queue
-    ThreadSafeQueue<PacketJob>& getFPQueue(int id) { return fps_[id]->getInputQueue(); }
+    std::shared_ptr<ThreadSafeQueue<PacketJob>> getFPQueue(int id) { return fps_[id]->getInputQueue(); }
     
-    // Get all FP queues as raw pointers (for LB manager)
-    std::vector<ThreadSafeQueue<PacketJob>*> getQueuePtrs() {
-        std::vector<ThreadSafeQueue<PacketJob>*> ptrs;
+    // Get all FP queues as shared pointers (for LB manager)
+    std::vector<std::shared_ptr<ThreadSafeQueue<PacketJob>>> getQueuePtrs() {
+        std::vector<std::shared_ptr<ThreadSafeQueue<PacketJob>>> ptrs;
         for (auto& fp : fps_) {
-            ptrs.push_back(&fp->getInputQueue());
+            ptrs.push_back(fp->getInputQueue());
         }
         return ptrs;
     }

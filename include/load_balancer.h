@@ -40,7 +40,7 @@ public:
     // fp_queues: Pointers to FP input queues that this LB serves
     // fp_start_id: Starting FP ID for this LB's pool
     LoadBalancer(int lb_id, 
-                 std::vector<ThreadSafeQueue<PacketJob>*> fp_queues,
+                 std::vector<std::shared_ptr<ThreadSafeQueue<PacketJob>>> fp_queues,
                  int fp_start_id);
     
     ~LoadBalancer();
@@ -78,12 +78,12 @@ private:
     ThreadSafeQueue<PacketJob> input_queue_;
     
     // Output queues to FP threads
-    std::vector<ThreadSafeQueue<PacketJob>*> fp_queues_;
+    std::vector<std::shared_ptr<ThreadSafeQueue<PacketJob>>> fp_queues_;
     
     // Statistics
     std::atomic<uint64_t> packets_received_{0};
     std::atomic<uint64_t> packets_dispatched_{0};
-    std::vector<uint64_t> per_fp_counts_;  // Not shared, so no atomics needed
+    std::unique_ptr<std::atomic<uint64_t>[]> per_fp_counts_;
     
     // Thread control
     std::atomic<bool> running_{false};
@@ -106,7 +106,7 @@ public:
     // fps_per_lb: Number of FP threads per LB
     // fp_queues: Raw pointers to FP input queues
     LBManager(int num_lbs, int fps_per_lb,
-              std::vector<ThreadSafeQueue<PacketJob>*> fp_queues);
+              std::vector<std::shared_ptr<ThreadSafeQueue<PacketJob>>> fp_queues);
     
     ~LBManager();
     

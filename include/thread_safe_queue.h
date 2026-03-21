@@ -19,14 +19,15 @@ public:
     ThreadSafeQueue(size_t max_size = 10000) : max_size_(max_size) {}
     
     // Push item to queue (blocks if full)
-    void push(T item) {
+    bool push(T item) {
         std::unique_lock<std::mutex> lock(mutex_);
         not_full_.wait(lock, [this] { return queue_.size() < max_size_ || shutdown_; });
         
-        if (shutdown_) return;
+        if (shutdown_) return false;
         
         queue_.push(std::move(item));
         not_empty_.notify_one();
+        return true;
     }
     
     // Try to push without blocking

@@ -1,6 +1,7 @@
 #include "../include/load_balancer.h"
 #include <iostream>
 #include <chrono>
+#include <stdexcept>
 
 namespace DPI {
 
@@ -9,14 +10,17 @@ namespace DPI {
 // ============================================================================
 
 LoadBalancer::LoadBalancer(int lb_id,
-                           std::vector<ThreadSafeQueue<PacketJob>*> fp_queues,
+                           std::vector<std::shared_ptr<ThreadSafeQueue<PacketJob>>> fp_queues,
                            int fp_start_id)
     : lb_id_(lb_id),
       fp_start_id_(fp_start_id),
       num_fps_(fp_queues.size()),
       input_queue_(10000),
       fp_queues_(std::move(fp_queues)),
-      per_fp_counts_(fp_queues.size()) {
+      per_fp_counts_(std::make_unique<std::atomic<uint64_t>[]>(fp_queues_.size())) {
+    for (int i = 0; i < num_fps_; i++) {
+        per_fp_counts_[i] = 0;
+    }
 }
 
 LoadBalancer::~LoadBalancer() {
@@ -61,10 +65,15 @@ void LoadBalancer::run() {
         int fp_index = selectFP(job_opt->tuple);
         
         // Push to selected FP's queue
-        fp_queues_[fp_index]->push(std::move(*job_opt));
+        bool enqueued = false;
+        if (fp_queues_[fp_index]) {
+            enqueued = fp_queues_[fp_index]->push(std::move(*job_opt));
+        }
         
-        packets_dispatched_++;
-        per_fp_counts_[fp_index]++;
+        if (enqueued) {
+            packets_dispatched_++;
+            per_fp_counts_[fp_index]++;
+        }
     }
 }
 
@@ -80,7 +89,10 @@ LoadBalancer::LBStats LoadBalancer::getStats() const {
     stats.packets_received = packets_received_.load();
     stats.packets_dispatched = packets_dispatched_.load();
     
-    stats.per_fp_packets = per_fp_counts_;
+    stats.per_fp_packets.resize(num_fps_);
+    for (int i = 0; i < num_fps_; i++) {
+        stats.per_fp_packets[i] = per_fp_counts_[i].load();
+    }
     
     return stats;
 }
@@ -90,12 +102,27 @@ LoadBalancer::LBStats LoadBalancer::getStats() const {
 // ============================================================================
 
 LBManager::LBManager(int num_lbs, int fps_per_lb,
-                     std::vector<ThreadSafeQueue<PacketJob>*> fp_queues)
+                     std::vector<std::shared_ptr<ThreadSafeQueue<PacketJob>>> fp_queues)
     : fps_per_lb_(fps_per_lb) {
+    
+    if (num_lbs <= 0 || fps_per_lb <= 0) {
+        throw std::invalid_argument("num_lbs and fps_per_lb must be positive");
+    }
+
+    const size_t expected = static_cast<size_t>(num_lbs) * static_cast<size_t>(fps_per_lb);
+    if (fp_queues.size() != expected) {
+        throw std::invalid_argument("LB/FP topology must match the number of FP queues");
+    }
+
+    for (const auto& queue : fp_queues) {
+        if (!queue) {
+            throw std::invalid_argument("FP queue pointers must be non-null");
+        }
+    }
     
     // Create load balancers, each handling a subset of FPs
     for (int lb_id = 0; lb_id < num_lbs; lb_id++) {
-        std::vector<ThreadSafeQueue<PacketJob>*> lb_fp_queues;
+        std::vector<std::shared_ptr<ThreadSafeQueue<PacketJob>>> lb_fp_queues;
         int fp_start = lb_id * fps_per_lb;
         
         for (int i = 0; i < fps_per_lb; i++) {
@@ -129,7 +156,9 @@ LoadBalancer& LBManager::getLBForPacket(const FiveTuple& tuple) {
     // First level of load balancing: select LB based on hash
     FiveTupleHash hasher;
     size_t hash = hasher(tuple);
-    int lb_index = hash % lbs_.size();
+    size_t total_fps = lbs_.size() * fps_per_lb_;
+    size_t global_index = hash % total_fps;
+    int lb_index = global_index / fps_per_lb_;
     return *lbs_[lb_index];
 }
 
