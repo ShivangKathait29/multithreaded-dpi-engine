@@ -112,7 +112,7 @@ enum class PacketAction {
 // ============================================================================
 struct Connection {
     FiveTuple tuple;
-    ConnectionState state = ConnectionState::NEW;
+    std::atomic<ConnectionState> state{ConnectionState::NEW};
     AppType app_type = AppType::UNKNOWN;
     std::string sni;  // Server Name Indication (if detected)
     
@@ -127,9 +127,47 @@ struct Connection {
     PacketAction action = PacketAction::FORWARD;
     
     // For TCP state tracking
-    bool syn_seen = false;
-    bool syn_ack_seen = false;
-    bool fin_seen = false;
+    std::atomic<bool> syn_seen{false};
+    std::atomic<bool> syn_ack_seen{false};
+    std::atomic<bool> fin_seen{false};
+
+    Connection() = default;
+
+    Connection(const Connection& other) {
+        tuple = other.tuple;
+        state.store(other.state.load());
+        app_type = other.app_type;
+        sni = other.sni;
+        packets_in = other.packets_in;
+        packets_out = other.packets_out;
+        bytes_in = other.bytes_in;
+        bytes_out = other.bytes_out;
+        first_seen = other.first_seen;
+        last_seen = other.last_seen;
+        action = other.action;
+        syn_seen.store(other.syn_seen.load());
+        syn_ack_seen.store(other.syn_ack_seen.load());
+        fin_seen.store(other.fin_seen.load());
+    }
+
+    Connection& operator=(const Connection& other) {
+        if (this == &other) return *this;
+        tuple = other.tuple;
+        state.store(other.state.load());
+        app_type = other.app_type;
+        sni = other.sni;
+        packets_in = other.packets_in;
+        packets_out = other.packets_out;
+        bytes_in = other.bytes_in;
+        bytes_out = other.bytes_out;
+        first_seen = other.first_seen;
+        last_seen = other.last_seen;
+        action = other.action;
+        syn_seen.store(other.syn_seen.load());
+        syn_ack_seen.store(other.syn_ack_seen.load());
+        fin_seen.store(other.fin_seen.load());
+        return *this;
+    }
 };
 
 // ============================================================================
