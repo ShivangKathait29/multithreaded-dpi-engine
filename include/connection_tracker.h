@@ -3,6 +3,7 @@
 
 #include "types.h"
 #include <unordered_map>
+#include <memory>
 #include <shared_mutex>
 #include <vector>
 #include <chrono>
@@ -30,19 +31,19 @@ public:
     
     // Get or create connection entry
     // Returns pointer to existing or newly created connection
-    Connection* getOrCreateConnection(const FiveTuple& tuple);
+    std::shared_ptr<Connection> getOrCreateConnection(const FiveTuple& tuple);
     
     // Get existing connection (returns nullptr if not found)
-    Connection* getConnection(const FiveTuple& tuple);
+    std::shared_ptr<Connection> getConnection(const FiveTuple& tuple);
     
     // Update connection with new packet
-    void updateConnection(Connection* conn, size_t packet_size, bool is_outbound);
+    void updateConnection(std::shared_ptr<Connection> conn, size_t packet_size, bool is_outbound);
     
     // Mark connection as classified
-    void classifyConnection(Connection* conn, AppType app, const std::string& sni);
+    void classifyConnection(std::shared_ptr<Connection> conn, AppType app, const std::string& sni);
     
     // Mark connection as blocked
-    void blockConnection(Connection* conn);
+    void blockConnection(std::shared_ptr<Connection> conn);
     
     // Mark connection as closed
     void closeConnection(const FiveTuple& tuple);
@@ -82,7 +83,7 @@ private:
     // Connection table
     // Note: FiveTuple hash ensures consistent mapping, so we don't need
     // to handle bidirectional flows specially here
-    std::unordered_map<FiveTuple, Connection, FiveTupleHash> connections_;
+    std::unordered_map<FiveTuple, std::shared_ptr<Connection>, FiveTupleHash> connections_;
     
     // Statistics
     size_t total_seen_ = 0;
