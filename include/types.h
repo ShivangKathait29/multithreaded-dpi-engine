@@ -8,6 +8,7 @@
 #include <vector>
 #include <atomic>
 #include <optional>
+#include <mutex>
 
 namespace DPI {
 
@@ -131,9 +132,12 @@ struct Connection {
     std::atomic<bool> syn_ack_seen{false};
     std::atomic<bool> fin_seen{false};
 
+    mutable std::mutex flow_mutex;
+
     Connection() = default;
 
     Connection(const Connection& other) {
+        std::lock_guard<std::mutex> lock(other.flow_mutex);
         tuple = other.tuple;
         state.store(other.state.load());
         app_type = other.app_type;
@@ -152,6 +156,10 @@ struct Connection {
 
     Connection& operator=(const Connection& other) {
         if (this == &other) return *this;
+        std::lock(flow_mutex, other.flow_mutex);
+        std::lock_guard<std::mutex> lock1(flow_mutex, std::adopt_lock);
+        std::lock_guard<std::mutex> lock2(other.flow_mutex, std::adopt_lock);
+
         tuple = other.tuple;
         state.store(other.state.load());
         app_type = other.app_type;

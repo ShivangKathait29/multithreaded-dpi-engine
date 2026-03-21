@@ -249,6 +249,7 @@ PacketAction FastPathProcessor::checkRules(const PacketJob& job, std::shared_ptr
 }
 
 void FastPathProcessor::updateTCPState(std::shared_ptr<Connection> conn, uint8_t tcp_flags) {
+    std::lock_guard<std::mutex> lock(conn->flow_mutex);
     constexpr uint8_t SYN = 0x02;
     constexpr uint8_t ACK = 0x10;
     constexpr uint8_t FIN = 0x01;
