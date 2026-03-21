@@ -107,19 +107,19 @@ private:
     PacketAction processPacket(PacketJob& job);
     
     // Inspect packet payload for classification
-    void inspectPayload(PacketJob& job, Connection* conn);
+    void inspectPayload(PacketJob& job, std::shared_ptr<Connection> conn);
     
     // Extract SNI from TLS Client Hello
-    bool tryExtractSNI(const PacketJob& job, Connection* conn);
+    bool tryExtractSNI(const PacketJob& job, std::shared_ptr<Connection> conn);
     
     // Extract Host from HTTP request
-    bool tryExtractHTTPHost(const PacketJob& job, Connection* conn);
+    bool tryExtractHTTPHost(const PacketJob& job, std::shared_ptr<Connection> conn);
     
     // Check if packet matches any blocking rules
-    PacketAction checkRules(const PacketJob& job, Connection* conn);
+    PacketAction checkRules(const PacketJob& job, std::shared_ptr<Connection> conn);
     
     // Update TCP connection state
-    void updateTCPState(Connection* conn, uint8_t tcp_flags);
+    void updateTCPState(std::shared_ptr<Connection> conn, uint8_t tcp_flags);
 };
 
 // ============================================================================

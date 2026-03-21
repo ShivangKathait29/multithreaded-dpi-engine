@@ -51,6 +51,9 @@ public:
     // Stop the LB thread
     void stop();
     
+    // Stop the LB thread after completely draining the input queue
+    void stopAndDrain();
+    
     // Get input queue (for reader to push packets)
     ThreadSafeQueue<PacketJob>& getInputQueue() { return input_queue_; }
     
@@ -115,6 +118,9 @@ public:
     
     // Stop all LB threads
     void stopAll();
+    
+    // Stop all LB threads after completely draining their input queues
+    void stopAndDrainAll();
     
     // Get LB for a given packet (based on hash)
     LoadBalancer& getLBForPacket(const FiveTuple& tuple);

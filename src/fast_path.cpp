@@ -78,7 +78,7 @@ void FastPathProcessor::run() {
 
 PacketAction FastPathProcessor::processPacket(PacketJob& job) {
     // Get or create connection
-    Connection* conn = conn_tracker_.getOrCreateConnection(job.tuple);
+    std::shared_ptr<Connection> conn = conn_tracker_.getOrCreateConnection(job.tuple);
     if (!conn) {
         // Should not happen, but handle gracefully
         return PacketAction::FORWARD;
@@ -107,7 +107,7 @@ PacketAction FastPathProcessor::processPacket(PacketJob& job) {
     return checkRules(job, conn);
 }
 
-void FastPathProcessor::inspectPayload(PacketJob& job, Connection* conn) {
+void FastPathProcessor::inspectPayload(PacketJob& job, std::shared_ptr<Connection> conn) {
     if (job.payload_length == 0 || job.payload_offset >= job.data.size()) {
         return;
     }
@@ -146,7 +146,7 @@ void FastPathProcessor::inspectPayload(PacketJob& job, Connection* conn) {
     }
 }
 
-bool FastPathProcessor::tryExtractSNI(const PacketJob& job, Connection* conn) {
+bool FastPathProcessor::tryExtractSNI(const PacketJob& job, std::shared_ptr<Connection> conn) {
     // Only for port 443 (HTTPS) or if it looks like TLS
     if (job.tuple.dst_port != 443 && job.payload_length < 50) {
         return false;
@@ -175,7 +175,7 @@ bool FastPathProcessor::tryExtractSNI(const PacketJob& job, Connection* conn) {
     return false;
 }
 
-bool FastPathProcessor::tryExtractHTTPHost(const PacketJob& job, Connection* conn) {
+bool FastPathProcessor::tryExtractHTTPHost(const PacketJob& job, std::shared_ptr<Connection> conn) {
     // Only for port 80 (HTTP)
     if (job.tuple.dst_port != 80) {
         return false;
@@ -201,7 +201,7 @@ bool FastPathProcessor::tryExtractHTTPHost(const PacketJob& job, Connection* con
     return false;
 }
 
-PacketAction FastPathProcessor::checkRules(const PacketJob& job, Connection* conn) {
+PacketAction FastPathProcessor::checkRules(const PacketJob& job, std::shared_ptr<Connection> conn) {
     if (!rule_manager_) {
         return PacketAction::FORWARD;
     }
@@ -248,7 +248,7 @@ PacketAction FastPathProcessor::checkRules(const PacketJob& job, Connection* con
     return PacketAction::FORWARD;
 }
 
-void FastPathProcessor::updateTCPState(Connection* conn, uint8_t tcp_flags) {
+void FastPathProcessor::updateTCPState(std::shared_ptr<Connection> conn, uint8_t tcp_flags) {
     constexpr uint8_t SYN = 0x02;
     constexpr uint8_t ACK = 0x10;
     constexpr uint8_t FIN = 0x01;

@@ -50,12 +50,26 @@ void LoadBalancer::stop() {
     std::cout << "[LB" << lb_id_ << "] Stopped\n";
 }
 
+void LoadBalancer::stopAndDrain() {
+    if (!running_) return;
+
+    running_ = false;
+    input_queue_.shutdown();
+
+    if (thread_.joinable()) {
+        thread_.join();
+    }
+    
+    std::cout << "[LB" << lb_id_ << "] Stopped and fully drained\n";
+}
+
 void LoadBalancer::run() {
-    while (running_) {
+    while (running_ || !input_queue_.empty()) {
         // Get packet from input queue (with timeout to check running flag)
         auto job_opt = input_queue_.popWithTimeout(std::chrono::milliseconds(100));
         
         if (!job_opt) {
+            if (!running_ && input_queue_.empty()) break;
             continue;  // Timeout or shutdown
         }
         
@@ -149,6 +163,12 @@ void LBManager::startAll() {
 void LBManager::stopAll() {
     for (auto& lb : lbs_) {
         lb->stop();
+    }
+}
+
+void LBManager::stopAndDrainAll() {
+    for (auto& lb : lbs_) {
+        lb->stopAndDrain();
     }
 }
 

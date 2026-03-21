@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <optional>
 #include <chrono>
+#include <stdexcept>
 
 namespace DPI {
 
@@ -16,7 +17,11 @@ namespace DPI {
 template<typename T>
 class ThreadSafeQueue {
 public:
-    ThreadSafeQueue(size_t max_size = 10000) : max_size_(max_size) {}
+    ThreadSafeQueue(size_t max_size = 10000) : max_size_(max_size) {
+        if (max_size_ == 0) {
+            throw std::invalid_argument("ThreadSafeQueue max_size must be greater than 0");
+        }
+    }
     
     // Push item to queue (blocks if full)
     bool push(T item) {

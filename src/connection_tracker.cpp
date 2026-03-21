@@ -14,16 +14,16 @@ ConnectionTracker::ConnectionTracker(int fp_id, size_t max_connections)
     : fp_id_(fp_id), max_connections_(max_connections) {
 }
 
-Connection* ConnectionTracker::getOrCreateConnection(const FiveTuple& tuple) {
+std::shared_ptr<Connection> ConnectionTracker::getOrCreateConnection(const FiveTuple& tuple) {
     std::unique_lock<std::shared_mutex> lock(mutex_);
     auto it = connections_.find(tuple);
     if (it != connections_.end()) {
-        return &it->second;
+        return it->second;
     }
     
     it = connections_.find(tuple.reverse());
     if (it != connections_.end()) {
-        return &it->second;
+        return it->second;
     }
     
     // Check if we need to evict old connections
@@ -32,35 +32,35 @@ Connection* ConnectionTracker::getOrCreateConnection(const FiveTuple& tuple) {
     }
     
     // Create new connection
-    Connection conn;
-    conn.tuple = tuple;
-    conn.state = ConnectionState::NEW;
-    conn.first_seen = std::chrono::steady_clock::now();
-    conn.last_seen = conn.first_seen;
+    auto conn = std::make_shared<Connection>();
+    conn->tuple = tuple;
+    conn->state = ConnectionState::NEW;
+    conn->first_seen = std::chrono::steady_clock::now();
+    conn->last_seen = conn->first_seen;
     
-    auto result = connections_.emplace(tuple, std::move(conn));
+    connections_.emplace(tuple, conn);
     total_seen_++;
     
-    return &result.first->second;
+    return conn;
 }
 
-Connection* ConnectionTracker::getConnection(const FiveTuple& tuple) {
+std::shared_ptr<Connection> ConnectionTracker::getConnection(const FiveTuple& tuple) {
     std::shared_lock<std::shared_mutex> lock(mutex_);
     auto it = connections_.find(tuple);
     if (it != connections_.end()) {
-        return &it->second;
+        return it->second;
     }
     
     // Try reverse tuple (for bidirectional matching)
     auto rev = connections_.find(tuple.reverse());
     if (rev != connections_.end()) {
-        return &rev->second;
+        return rev->second;
     }
     
     return nullptr;
 }
 
-void ConnectionTracker::updateConnection(Connection* conn, size_t packet_size, bool is_outbound) {
+void ConnectionTracker::updateConnection(std::shared_ptr<Connection> conn, size_t packet_size, bool is_outbound) {
     std::unique_lock<std::shared_mutex> lock(mutex_);
     if (!conn) return;
     
@@ -75,7 +75,7 @@ void ConnectionTracker::updateConnection(Connection* conn, size_t packet_size, b
     }
 }
 
-void ConnectionTracker::classifyConnection(Connection* conn, AppType app, const std::string& sni) {
+void ConnectionTracker::classifyConnection(std::shared_ptr<Connection> conn, AppType app, const std::string& sni) {
     std::unique_lock<std::shared_mutex> lock(mutex_);
     if (!conn) return;
     
@@ -87,7 +87,7 @@ void ConnectionTracker::classifyConnection(Connection* conn, AppType app, const 
     }
 }
 
-void ConnectionTracker::blockConnection(Connection* conn) {
+void ConnectionTracker::blockConnection(std::shared_ptr<Connection> conn) {
     std::unique_lock<std::shared_mutex> lock(mutex_);
     if (!conn) return;
     
@@ -105,7 +105,7 @@ void ConnectionTracker::closeConnection(const FiveTuple& tuple) {
         it = connections_.find(tuple.reverse());
     }
     if (it != connections_.end()) {
-        it->second.state = ConnectionState::CLOSED;
+        it->second->state = ConnectionState::CLOSED;
     }
 }
 
@@ -116,9 +116,9 @@ size_t ConnectionTracker::cleanupStale(std::chrono::seconds timeout) {
     
     for (auto it = connections_.begin(); it != connections_.end(); ) {
         auto age = std::chrono::duration_cast<std::chrono::seconds>(
-            now - it->second.last_seen);
+            now - it->second->last_seen);
         
-        if (age > timeout || it->second.state == ConnectionState::CLOSED) {
+        if (age > timeout || it->second->state == ConnectionState::CLOSED) {
             it = connections_.erase(it);
             removed++;
         } else {
@@ -135,7 +135,7 @@ std::vector<Connection> ConnectionTracker::getAllConnections() const {
     result.reserve(connections_.size());
     
     for (const auto& pair : connections_) {
-        result.push_back(pair.second);
+        result.push_back(*pair.second);
     }
     
     return result;
@@ -145,7 +145,7 @@ size_t ConnectionTracker::getActiveCount() const {
     std::shared_lock<std::shared_mutex> lock(mutex_);
     size_t active = 0;
     for (const auto& pair : connections_) {
-        if (pair.second.state != ConnectionState::CLOSED) {
+        if (pair.second->state != ConnectionState::CLOSED) {
             active++;
         }
     }
@@ -169,9 +169,9 @@ void ConnectionTracker::clear() {
 }
 
 void ConnectionTracker::forEach(std::function<void(const Connection&)> callback) const {
-    std::shared_lock<std::shared_mutex> lock(mutex_);
-    for (const auto& pair : connections_) {
-        callback(pair.second);
+    auto snapshot = getAllConnections();
+    for (const auto& conn : snapshot) {
+        callback(conn);
     }
 }
 
@@ -181,7 +181,7 @@ void ConnectionTracker::evictOldest() {
     // Find oldest connection
     auto oldest = connections_.begin();
     for (auto it = connections_.begin(); it != connections_.end(); ++it) {
-        if (it->second.last_seen < oldest->second.last_seen) {
+        if (it->second->last_seen < oldest->second->last_seen) {
             oldest = it;
         }
     }
