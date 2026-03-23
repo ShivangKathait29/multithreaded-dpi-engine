@@ -20,9 +20,9 @@ DPIEngine::DPIEngine(const Config& config)
     std::cout << "║               Deep Packet Inspection System                   ║\n";
     std::cout << "╠══════════════════════════════════════════════════════════════╣\n";
     std::cout << "║ Configuration:                                                ║\n";
-    std::cout << "║   Load Balancers:    " << std::setw(3) << config.num_load_balancers << "                                       ║\n";
+    std::cout << "║   Load Balancers:    " << std::setw(3) << config.num_lbs << "                                       ║\n";
     std::cout << "║   FPs per LB:        " << std::setw(3) << config.fps_per_lb << "                                       ║\n";
-    std::cout << "║   Total FP threads:  " << std::setw(3) << (config.num_load_balancers * config.fps_per_lb) << "                                       ║\n";
+    std::cout << "║   Total FP threads:  " << std::setw(3) << (config.num_lbs * config.fps_per_lb) << "                                       ║\n";
     std::cout << "╚══════════════════════════════════════════════════════════════╝\n";
 }
 
@@ -45,12 +45,12 @@ bool DPIEngine::initialize() {
     };
     
     // Create FP manager (creates FP threads and their queues)
-    int total_fps = config_.num_load_balancers * config_.fps_per_lb;
+    int total_fps = config_.num_lbs * config_.fps_per_lb;
     fp_manager_ = std::make_unique<FPManager>(total_fps, rule_manager_.get(), output_cb);
     
     // Create LB manager (creates LB threads, connects to FP queues)
     lb_manager_ = std::make_unique<LBManager>(
-        config_.num_load_balancers,
+        config_.num_lbs,
         config_.fps_per_lb,
         fp_manager_->getQueuePtrs()
     );

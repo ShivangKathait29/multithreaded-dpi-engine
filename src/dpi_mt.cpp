@@ -81,14 +81,14 @@ private:
 // Packet Job - Contains all packet data (self-contained, no pointers)
 // =============================================================================
 struct Packet {
-    uint32_t id;
-    uint32_t ts_sec;
-    uint32_t ts_usec;
+    uint32_t id = 0;
+    uint32_t ts_sec = 0;
+    uint32_t ts_usec = 0;
     FiveTuple tuple;
     std::vector<uint8_t> data;
-    uint8_t tcp_flags;
-    size_t payload_offset;
-    size_t payload_length;
+    uint8_t tcp_flags = 0;
+    size_t payload_offset = 0;
+    size_t payload_length = 0;
 };
 
 // =============================================================================

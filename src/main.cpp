@@ -101,7 +101,12 @@ int main(int argc, char* argv[]) {
     int max_packets = -1;  // -1 means no limit
     
     if (argc >= 3) {
-        max_packets = std::stoi(argv[2]);
+        try {
+            max_packets = std::stoi(argv[2]);
+        } catch (const std::exception& e) {
+            std::cerr << "Invalid max_packets value: " << argv[2] << "\n";
+            return 1;
+        }
     }
     
     // Open the PCAP file
