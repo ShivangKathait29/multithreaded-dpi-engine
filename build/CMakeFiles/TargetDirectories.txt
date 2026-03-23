@@ -1,0 +1,6 @@
+C:/projects/multithreaded-dpi-engine/build/CMakeFiles/packet_analyzer.dir
+C:/projects/multithreaded-dpi-engine/build/CMakeFiles/dpi_engine_app.dir
+C:/projects/multithreaded-dpi-engine/build/CMakeFiles/simple_analyzer.dir
+C:/projects/multithreaded-dpi-engine/build/CMakeFiles/dpi_mt.dir
+C:/projects/multithreaded-dpi-engine/build/CMakeFiles/edit_cache.dir
+C:/projects/multithreaded-dpi-engine/build/CMakeFiles/rebuild_cache.dir

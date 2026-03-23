@@ -83,7 +83,7 @@ int main(int argc, char* argv[]) {
     
     // Parse options
     DPIEngine::Config config;
-    config.num_load_balancers = 2;
+    config.num_lbs = 2;
     config.fps_per_lb = 2;
     
     std::vector<std::string> block_ips;
@@ -103,7 +103,7 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--rules" && i + 1 < argc) {
             rules_file = argv[++i];
         } else if (arg == "--lbs" && i + 1 < argc) {
-            config.num_load_balancers = std::stoi(argv[++i]);
+            config.num_lbs = std::stoi(argv[++i]);
         } else if (arg == "--fps" && i + 1 < argc) {
             config.fps_per_lb = std::stoi(argv[++i]);
         } else if (arg == "--verbose") {

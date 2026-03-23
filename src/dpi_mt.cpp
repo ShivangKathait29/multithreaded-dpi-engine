@@ -107,6 +107,31 @@ struct FlowEntry {
 // =============================================================================
 // Blocking Rules
 // =============================================================================
+inline uint32_t parseIPv4OrThrow(const std::string& ip) {
+    uint32_t result = 0;
+    uint32_t octet = 0;
+    int shift = 0;
+    int count = 0;
+    for (char c : ip) {
+        if (c == '.') {
+            if (octet > 255) throw std::invalid_argument("Octet > 255");
+            result |= (octet << shift);
+            shift += 8;
+            octet = 0;
+            count++;
+        }
+        else if (c >= '0' && c <= '9') {
+            octet = octet * 10 + (c - '0');
+        }
+        else throw std::invalid_argument("Invalid char");
+    }
+    if (octet > 255) throw std::invalid_argument("Octet > 255");
+    result |= (octet << shift);
+    count++;
+    if (count != 4) throw std::invalid_argument("Not 4 octets");
+    return result;
+}
+
 class Rules {
 public:
     void blockIP(const std::string& ip) {
@@ -145,13 +170,11 @@ public:
 
 private:
     static uint32_t parseIP(const std::string& ip) {
-        uint32_t result = 0;
-        int octet = 0, shift = 0;
-        for (char c : ip) {
-            if (c == '.') { result |= (octet << shift); shift += 8; octet = 0; }
-            else if (c >= '0' && c <= '9') octet = octet * 10 + (c - '0');
+        try {
+            return parseIPv4OrThrow(ip);
+        } catch (...) {
+            return 0;
         }
-        return result | (octet << shift);
     }
     
     mutable std::mutex mutex_;
@@ -185,6 +208,12 @@ struct Stats {
     }
 };
 
+inline FiveTuple canonicalize(const FiveTuple& t) {
+    if (t.src_ip < t.dst_ip) return t;
+    if (t.src_ip == t.dst_ip && t.src_port < t.dst_port) return t;
+    return t.reverse();
+}
+
 // =============================================================================
 // Fast Path Processor (one per FP thread)
 // =============================================================================
@@ -194,12 +223,10 @@ public:
         : id_(id), rules_(rules), stats_(stats), output_queue_(output_queue) {}
     
     void start() {
-        running_ = true;
         thread_ = std::thread(&FastPath::run, this);
     }
     
     void stop() {
-        running_ = false;
         input_queue_.shutdown();
         if (thread_.joinable()) thread_.join();
     }
@@ -216,22 +243,25 @@ private:
     TSQueue<Packet> input_queue_;
     std::unordered_map<FiveTuple, FlowEntry, FiveTupleHash> flows_;
     
-    std::atomic<bool> running_{false};
     std::thread thread_;
     std::atomic<uint64_t> processed_{0};
     
     void run() {
-        while (running_) {
+        while (true) {
             auto pkt_opt = input_queue_.pop(100);
-            if (!pkt_opt) continue;
+            if (!pkt_opt) {
+                if (input_queue_.is_shutdown()) break;
+                continue;
+            }
             
             processed_++;
             Packet& pkt = *pkt_opt;
             
             // Get or create flow
-            FlowEntry& flow = flows_[pkt.tuple];
+            const FiveTuple flow_key = canonicalize(pkt.tuple);
+            FlowEntry& flow = flows_[flow_key];
             if (flow.packets == 0) {
-                flow.tuple = pkt.tuple;
+                flow.tuple = flow_key;
             }
             flow.packets++;
             flow.bytes += pkt.data.size();
@@ -309,12 +339,10 @@ public:
         : id_(id), fps_(std::move(fps)), num_fps_(fps_.size()) {}
     
     void start() {
-        running_ = true;
         thread_ = std::thread(&LoadBalancer::run, this);
     }
     
     void stop() {
-        running_ = false;
         input_queue_.shutdown();
         if (thread_.joinable()) thread_.join();
     }
@@ -329,18 +357,20 @@ private:
     size_t num_fps_;
     TSQueue<Packet> input_queue_;
     
-    std::atomic<bool> running_{false};
     std::thread thread_;
     std::atomic<uint64_t> dispatched_{0};
     
     void run() {
-        while (running_) {
+        while (true) {
             auto pkt_opt = input_queue_.pop(100);
-            if (!pkt_opt) continue;
+            if (!pkt_opt) {
+                if (input_queue_.is_shutdown()) break;
+                continue;
+            }
             
             // Hash to select FP
             FiveTupleHash hasher;
-            size_t fp_idx = hasher(pkt_opt->tuple) % num_fps_;
+            size_t fp_idx = hasher(canonicalize(pkt_opt->tuple)) % num_fps_;
             
             fps_[fp_idx]->queue().push(std::move(*pkt_opt));
             dispatched_++;
@@ -351,14 +381,14 @@ private:
 // =============================================================================
 // DPI Engine
 // =============================================================================
-class DPIEngine {
+class DPIEngineMT {
 public:
     struct Config {
         int num_lbs = 2;
         int fps_per_lb = 2;
     };
     
-    DPIEngine(const Config& cfg) : config_(cfg) {
+    DPIEngineMT(const Config& cfg) : config_(cfg) {
         int total_fps = cfg.num_lbs * cfg.fps_per_lb;
         
         std::cout << "\n";
@@ -448,13 +478,11 @@ public:
             
             // Parse 5-tuple
             auto parseIP = [](const std::string& ip) -> uint32_t {
-                uint32_t result = 0;
-                int octet = 0, shift = 0;
-                for (char c : ip) {
-                    if (c == '.') { result |= (octet << shift); shift += 8; octet = 0; }
-                    else if (c >= '0' && c <= '9') octet = octet * 10 + (c - '0');
+                try {
+                    return parseIPv4OrThrow(ip);
+                } catch (...) {
+                    return 0;
                 }
-                return result | (octet << shift);
             };
             
             pkt.tuple.src_ip = parseIP(parsed.src_ip);
@@ -491,17 +519,14 @@ public:
             
             // Dispatch to LB (hash-based)
             FiveTupleHash hasher;
-            size_t lb_idx = hasher(pkt.tuple) % lbs_.size();
+            size_t lb_idx = hasher(canonicalize(pkt.tuple)) % lbs_.size();
             lbs_[lb_idx]->queue().push(std::move(pkt));
         }
         
         std::cout << "[Reader] Done reading " << pkt_id << " packets\n";
         reader.close();
         
-        // Wait for queues to drain
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        
-        // Stop all threads
+        // Stop all threads (LBs stop and fully drain first, then FPs drain out)
         for (auto& lb : lbs_) lb->stop();
         for (auto& fp : fps_) fp->stop();
         
@@ -615,7 +640,7 @@ int main(int argc, char* argv[]) {
     std::string input = argv[1];
     std::string output = argv[2];
     
-    DPIEngine::Config cfg;
+    DPIEngineMT::Config cfg;
     std::vector<std::string> block_ips, block_apps, block_domains;
     
     for (int i = 3; i < argc; i++) {
@@ -623,11 +648,37 @@ int main(int argc, char* argv[]) {
         if (arg == "--block-ip" && i + 1 < argc) block_ips.push_back(argv[++i]);
         else if (arg == "--block-app" && i + 1 < argc) block_apps.push_back(argv[++i]);
         else if (arg == "--block-domain" && i + 1 < argc) block_domains.push_back(argv[++i]);
-        else if (arg == "--lbs" && i + 1 < argc) cfg.num_lbs = std::stoi(argv[++i]);
-        else if (arg == "--fps" && i + 1 < argc) cfg.fps_per_lb = std::stoi(argv[++i]);
+        else if (arg == "--lbs") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --lbs requires an argument\n";
+                return 1;
+            }
+            try {
+                int val = std::stoi(argv[++i]);
+                if (val <= 0) throw std::invalid_argument("must be > 0");
+                cfg.num_lbs = val;
+            } catch (...) {
+                std::cerr << "Error: --lbs requires a positive integer\n";
+                return 1;
+            }
+        }
+        else if (arg == "--fps") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --fps requires an argument\n";
+                return 1;
+            }
+            try {
+                int val = std::stoi(argv[++i]);
+                if (val <= 0) throw std::invalid_argument("must be > 0");
+                cfg.fps_per_lb = val;
+            } catch (...) {
+                std::cerr << "Error: --fps requires a positive integer\n";
+                return 1;
+            }
+        }
     }
     
-    DPIEngine engine(cfg);
+    DPIEngineMT engine(cfg);
     
     for (const auto& ip : block_ips) engine.blockIP(ip);
     for (const auto& app : block_apps) engine.blockApp(app);

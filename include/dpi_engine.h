@@ -58,6 +58,7 @@ public:
         int fps_per_lb = 2;
         size_t queue_size = 10000;
         std::string rules_file;
+        bool verbose = false;
     };
     
     DPIEngine(const Config& config);

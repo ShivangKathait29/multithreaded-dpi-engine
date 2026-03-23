@@ -1,0 +1,41 @@
+[  2%] Building CXX object CMakeFiles/packet_analyzer.dir/src/dpi_engine.cpp.obj
+cmake : In file included 
+from c:\projects\multithrea
+ded-dpi-engine\include\dpi_
+engine.h:4:0,
+At line:1 char:1
++ cmake --build build 2>&1 
+| Out-File -FilePath 
+build\log.txt -Encoding ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (In   
+  file include...i_engin   
+ e.h:4:0,:String) [], R    
+emoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+                 from C:\pr
+ojects\multithreaded-dpi-en
+gine\src\dpi_engine.cpp:1:
+c:\projects\multithreaded-d
+pi-engine\include\types.h:1
+0:20: fatal error: 
+optional: No such file or 
+directory
+ #include <optional>
+                    ^
+compilation terminated.
+mingw32-make.exe[2]: *** [C
+MakeFiles/packet_analyzer.d
+ir/src/dpi_engine.cpp.obj] 
+Error 1
+CMakeFiles\packet_analyzer.dir\build.make:120: recipe for target 'CMakeFiles/packet_analyzer.dir/src/dpi_engine.cpp.obj' failed
+CMakeFiles\Makefile2:87: recipe for target 'CMakeFiles/packet_analyzer.dir/all' failed
+mingw32-make.exe[1]: *** [C
+MakeFiles/packet_analyzer.d
+ir/all] Error 2
+Makefile:89: recipe for target 'all' failed
+mingw32-make.exe: *** 
+[all] Error 2

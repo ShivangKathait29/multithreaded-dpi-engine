@@ -1,0 +1,43 @@
+﻿[  9%] Building CXX object CMakeFiles/dpi_engine_app.dir/src/main_dpi.cpp.obj
+cmake : In file included from c:
+\projects\multithreaded-dpi-engi
+ne\include\dpi_engine.h:4:0,
+At line:1 char:1
++ cmake --build . --target 
+dpi_engine_app -j1 > build.log 
+2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo              
+: NotSpecified: (In     file 
+include...i_engin    
+e.h:4:0,:String) [], R    
+emoteException
+    + FullyQualifiedErrorI    d 
+: NativeCommandError
+ 
+                 from C:\project
+s\multithreaded-dpi-engine\src\m
+ain_dpi.cpp:5:
+c:\projects\multithreaded-dpi-en
+gine\include\types.h:10:20: 
+fatal error: optional: No such 
+file or directory
+ #include <optional>
+                    ^
+compilation terminated.
+CMakeFiles\dpi_engine_app.dir\build.make:75: recipe for target 'CMakeFiles/dpi_engine_app.dir/src/main_dpi.cpp.obj' failed
+mingw32-make.exe[3]: *** [CMakeF
+iles/dpi_engine_app.dir/src/main
+_dpi.cpp.obj] Error 1
+CMakeFiles\Makefile2:113: recipe for target 'CMakeFiles/dpi_engine_app.dir/all' failed
+mingw32-make.exe[2]: *** [CMakeF
+iles/dpi_engine_app.dir/all] 
+Error 2
+CMakeFiles\Makefile2:120: recipe for target 'CMakeFiles/dpi_engine_app.dir/rule' failed
+mingw32-make.exe[1]: *** [CMakeF
+iles/dpi_engine_app.dir/rule] 
+Error 2
+Makefile:136: recipe for target 'dpi_engine_app' failed
+mingw32-make.exe: *** 
+[dpi_engine_app] Error 2

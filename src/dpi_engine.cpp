@@ -31,6 +31,11 @@ DPIEngine::~DPIEngine() {
 }
 
 bool DPIEngine::initialize() {
+    if (config_.num_lbs <= 0 || config_.fps_per_lb <= 0) {
+        std::cerr << "[DPIEngine] Error: num_lbs and fps_per_lb must be > 0\n";
+        return false;
+    }
+
     // Create rule manager
     rule_manager_ = std::make_unique<RuleManager>();
     
