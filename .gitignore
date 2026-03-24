@@ -1,5 +1,6 @@
 build/
 .cache/
+*.pcap
 compile_commands.json
 *.exe
 *.obj
