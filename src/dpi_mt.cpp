@@ -137,7 +137,6 @@ public:
     void blockIP(const std::string& ip) {
         std::lock_guard<std::mutex> lock(mutex_);
         blocked_ips_.insert(parseIP(ip));
-        std::cout << "[Rules] Blocked IP: " << ip << "\n";
     }
     
     void blockApp(const std::string& app) {
@@ -145,7 +144,6 @@ public:
         for (int i = 0; i < static_cast<int>(AppType::APP_COUNT); i++) {
             if (appTypeToString(static_cast<AppType>(i)) == app) {
                 blocked_apps_.insert(static_cast<AppType>(i));
-                std::cout << "[Rules] Blocked app: " << app << "\n";
                 return;
             }
         }
@@ -155,7 +153,6 @@ public:
     void blockDomain(const std::string& domain) {
         std::lock_guard<std::mutex> lock(mutex_);
         blocked_domains_.push_back(domain);
-        std::cout << "[Rules] Blocked domain: " << domain << "\n";
     }
     
     bool isBlocked(uint32_t src_ip, AppType app, const std::string& sni) const {
@@ -219,8 +216,8 @@ inline FiveTuple canonicalize(const FiveTuple& t) {
 // =============================================================================
 class FastPath {
 public:
-    FastPath(int id, Rules* rules, Stats* stats, TSQueue<Packet>* output_queue)
-        : id_(id), rules_(rules), stats_(stats), output_queue_(output_queue) {}
+    FastPath(int id, Rules* rules, Stats* stats, TSQueue<Packet>* output_queue, bool verbose = false)
+        : id_(id), rules_(rules), stats_(stats), output_queue_(output_queue), verbose_(verbose) {}
     
     void start() {
         thread_ = std::thread(&FastPath::run, this);
@@ -245,6 +242,7 @@ private:
     
     std::thread thread_;
     std::atomic<uint64_t> processed_{0};
+    bool verbose_;
     
     void run() {
         while (true) {
@@ -282,8 +280,16 @@ private:
             // Forward or drop
             if (flow.blocked) {
                 stats_->dropped++;
+                if (verbose_) {
+                    std::cout << "[FP" << id_ << "] Packet " << pkt.id << " BLOCKED (" 
+                              << appTypeToString(flow.app_type) << ")\n";
+                }
             } else {
                 stats_->forwarded++;
+                if (verbose_ && flow.classified && pkt.payload_length > 0) {
+                     std::cout << "[FP" << id_ << "] Packet " << pkt.id << " classified as " 
+                               << appTypeToString(flow.app_type) << "\n";
+                }
                 output_queue_->push(std::move(pkt));
             }
         }
@@ -335,8 +341,8 @@ private:
 // =============================================================================
 class LoadBalancer {
 public:
-    LoadBalancer(int id, std::vector<FastPath*> fps)
-        : id_(id), fps_(std::move(fps)), num_fps_(fps_.size()) {}
+    LoadBalancer(int id, std::vector<FastPath*> fps, bool verbose = false)
+        : id_(id), fps_(std::move(fps)), num_fps_(fps_.size()), verbose_(verbose) {}
     
     void start() {
         thread_ = std::thread(&LoadBalancer::run, this);
@@ -359,6 +365,7 @@ private:
     
     std::thread thread_;
     std::atomic<uint64_t> dispatched_{0};
+    bool verbose_;
     
     void run() {
         while (true) {
@@ -374,6 +381,12 @@ private:
             
             fps_[fp_idx]->queue().push(std::move(*pkt_opt));
             dispatched_++;
+            if (verbose_) {
+                // Too many log messages otherwise
+                if (dispatched_ % 1000 == 0) {
+                     std::cout << "[LB" << id_ << "] Dispatched " << dispatched_ << " packets\n";
+                }
+            }
         }
     }
 };
@@ -386,6 +399,7 @@ public:
     struct Config {
         int num_lbs = 2;
         int fps_per_lb = 2;
+        bool verbose = false;
     };
     
     DPIEngineMT(const Config& cfg) : config_(cfg) {
@@ -402,7 +416,7 @@ public:
         
         // Create FP threads
         for (int i = 0; i < total_fps; i++) {
-            fps_.push_back(std::make_unique<FastPath>(i, &rules_, &stats_, &output_queue_));
+            fps_.push_back(std::make_unique<FastPath>(i, &rules_, &stats_, &output_queue_, cfg.verbose));
         }
         
         // Create LB threads, each managing a subset of FPs
@@ -412,7 +426,7 @@ public:
             for (int i = 0; i < cfg.fps_per_lb; i++) {
                 lb_fps.push_back(fps_[start + i].get());
             }
-            lbs_.push_back(std::make_unique<LoadBalancer>(lb, std::move(lb_fps)));
+            lbs_.push_back(std::make_unique<LoadBalancer>(lb, std::move(lb_fps), cfg.verbose));
         }
     }
     
@@ -625,6 +639,7 @@ Options:
   --block-domain <dom>   Block domain (substring match)
   --lbs <n>              Number of load balancer threads (default: 2)
   --fps <n>              FP threads per LB (default: 2)
+  --verbose              Enable verbose logging
 
 Example:
   )" << prog << R"( capture.pcap filtered.pcap --block-app YouTube --block-ip 192.168.1.50
@@ -675,6 +690,9 @@ int main(int argc, char* argv[]) {
                 std::cerr << "Error: --fps requires a positive integer\n";
                 return 1;
             }
+        }
+        else if (arg == "--verbose") {
+            cfg.verbose = true;
         }
     }
     //DPIEngine

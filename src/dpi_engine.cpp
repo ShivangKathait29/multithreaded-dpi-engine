@@ -36,11 +36,17 @@ bool DPIEngine::initialize() {
         return false;
     }
 
+    if (config_.verbose) {
+        std::cout << "[DPIEngine] Initializing rule manager...\n";
+    }
     // Create rule manager
     rule_manager_ = std::make_unique<RuleManager>();
     
     // Load rules if specified
     if (!config_.rules_file.empty()) {
+        if (config_.verbose) {
+            std::cout << "[DPIEngine] Loading rules from: " << config_.rules_file << "\n";
+        }
         rule_manager_->loadRules(config_.rules_file);
     }
     
@@ -51,9 +57,15 @@ bool DPIEngine::initialize() {
     
     // Create FP manager (creates FP threads and their queues)
     int total_fps = config_.num_lbs * config_.fps_per_lb;
+    if (config_.verbose) {
+        std::cout << "[DPIEngine] Creating " << total_fps << " FastPath threads...\n";
+    }
     fp_manager_ = std::make_unique<FPManager>(total_fps, rule_manager_.get(), output_cb);
     
     // Create LB manager (creates LB threads, connects to FP queues)
+    if (config_.verbose) {
+        std::cout << "[DPIEngine] Creating " << config_.num_lbs << " LoadBalancer threads...\n";
+    }
     lb_manager_ = std::make_unique<LBManager>(
         config_.num_lbs,
         config_.fps_per_lb,
@@ -298,15 +310,19 @@ void DPIEngine::outputThreadFunc() {
     }
 }
 
-void DPIEngine::handleOutput(const PacketJob& job, PacketAction action) {
     if (action == PacketAction::DROP) {
         stats_.dropped_packets++;
+        if (config_.verbose) {
+            std::cout << "[DPIEngine] Packet " << job.packet_id << " DROPPED\n";
+        }
         return;
     }
     
     stats_.forwarded_packets++;
+    if (config_.verbose) {
+        std::cout << "[DPIEngine] Packet " << job.packet_id << " FORWARDED\n";
+    }
     output_queue_.push(job);
-}
 
 bool DPIEngine::writeOutputHeader(const PacketAnalyzer::PcapGlobalHeader& header) {
     std::lock_guard<std::mutex> lock(output_mutex_);

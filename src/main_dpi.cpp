@@ -103,9 +103,23 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--rules" && i + 1 < argc) {
             rules_file = argv[++i];
         } else if (arg == "--lbs" && i + 1 < argc) {
-            config.num_lbs = std::stoi(argv[++i]);
+            try {
+                int val = std::stoi(argv[++i]);
+                if (val <= 0) throw std::invalid_argument("must be > 0");
+                config.num_lbs = val;
+            } catch (...) {
+                std::cerr << "Error: --lbs requires a positive integer\n";
+                return 1;
+            }
         } else if (arg == "--fps" && i + 1 < argc) {
-            config.fps_per_lb = std::stoi(argv[++i]);
+            try {
+                int val = std::stoi(argv[++i]);
+                if (val <= 0) throw std::invalid_argument("must be > 0");
+                config.fps_per_lb = val;
+            } catch (...) {
+                std::cerr << "Error: --fps requires a positive integer\n";
+                return 1;
+            }
         } else if (arg == "--verbose") {
             config.verbose = true;
         } else if (arg == "--help" || arg == "-h") {
