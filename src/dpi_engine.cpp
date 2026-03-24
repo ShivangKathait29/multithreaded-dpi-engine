@@ -20,9 +20,9 @@ DPIEngine::DPIEngine(const Config& config)
     std::cout << "║               Deep Packet Inspection System                   ║\n";
     std::cout << "╠══════════════════════════════════════════════════════════════╣\n";
     std::cout << "║ Configuration:                                                ║\n";
-    std::cout << "║   Load Balancers:    " << std::setw(3) << config.num_load_balancers << "                                       ║\n";
+    std::cout << "║   Load Balancers:    " << std::setw(3) << config.num_lbs << "                                       ║\n";
     std::cout << "║   FPs per LB:        " << std::setw(3) << config.fps_per_lb << "                                       ║\n";
-    std::cout << "║   Total FP threads:  " << std::setw(3) << (config.num_load_balancers * config.fps_per_lb) << "                                       ║\n";
+    std::cout << "║   Total FP threads:  " << std::setw(3) << (config.num_lbs * config.fps_per_lb) << "                                       ║\n";
     std::cout << "╚══════════════════════════════════════════════════════════════╝\n";
 }
 
@@ -31,11 +31,22 @@ DPIEngine::~DPIEngine() {
 }
 
 bool DPIEngine::initialize() {
+    if (config_.num_lbs <= 0 || config_.fps_per_lb <= 0) {
+        std::cerr << "[DPIEngine] Error: num_lbs and fps_per_lb must be > 0\n";
+        return false;
+    }
+
+    if (config_.verbose) {
+        std::cout << "[DPIEngine] Initializing rule manager...\n";
+    }
     // Create rule manager
     rule_manager_ = std::make_unique<RuleManager>();
     
     // Load rules if specified
     if (!config_.rules_file.empty()) {
+        if (config_.verbose) {
+            std::cout << "[DPIEngine] Loading rules from: " << config_.rules_file << "\n";
+        }
         rule_manager_->loadRules(config_.rules_file);
     }
     
@@ -45,12 +56,18 @@ bool DPIEngine::initialize() {
     };
     
     // Create FP manager (creates FP threads and their queues)
-    int total_fps = config_.num_load_balancers * config_.fps_per_lb;
+    int total_fps = config_.num_lbs * config_.fps_per_lb;
+    if (config_.verbose) {
+        std::cout << "[DPIEngine] Creating " << total_fps << " FastPath threads...\n";
+    }
     fp_manager_ = std::make_unique<FPManager>(total_fps, rule_manager_.get(), output_cb);
     
     // Create LB manager (creates LB threads, connects to FP queues)
+    if (config_.verbose) {
+        std::cout << "[DPIEngine] Creating " << config_.num_lbs << " LoadBalancer threads...\n";
+    }
     lb_manager_ = std::make_unique<LBManager>(
-        config_.num_load_balancers,
+        config_.num_lbs,
         config_.fps_per_lb,
         fp_manager_->getQueuePtrs()
     );
@@ -293,15 +310,19 @@ void DPIEngine::outputThreadFunc() {
     }
 }
 
-void DPIEngine::handleOutput(const PacketJob& job, PacketAction action) {
     if (action == PacketAction::DROP) {
         stats_.dropped_packets++;
+        if (config_.verbose) {
+            std::cout << "[DPIEngine] Packet " << job.packet_id << " DROPPED\n";
+        }
         return;
     }
     
     stats_.forwarded_packets++;
+    if (config_.verbose) {
+        std::cout << "[DPIEngine] Packet " << job.packet_id << " FORWARDED\n";
+    }
     output_queue_.push(job);
-}
 
 bool DPIEngine::writeOutputHeader(const PacketAnalyzer::PcapGlobalHeader& header) {
     std::lock_guard<std::mutex> lock(output_mutex_);

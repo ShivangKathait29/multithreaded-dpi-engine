@@ -54,7 +54,7 @@ class DPIEngine {
 public:
     // Configuration
     struct Config {
-        int num_load_balancers = 2;
+        int num_lbs = 2;
         int fps_per_lb = 2;
         size_t queue_size = 10000;
         std::string rules_file;
