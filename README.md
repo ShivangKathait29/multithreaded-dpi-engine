@@ -101,12 +101,19 @@ This creates `test_dpi.pcap` with 16 TLS connections (with SNI), 2 HTTP connecti
 
 ### 4. Run
 
+**Linux / macOS / MinGW:**
 ```bash
 # Modular engine (v1.0)
-./build/Release/dpi_engine_app test_dpi.pcap output.pcap --verbose
+./build/dpi_engine_app test_dpi.pcap output.pcap --verbose
 
 # Standalone multithreaded engine (v2.0)
-./build/Release/dpi_mt test_dpi.pcap output.pcap --block-app YouTube --verbose
+./build/dpi_mt test_dpi.pcap output.pcap --block-app YouTube --verbose
+```
+
+**Windows (Visual Studio):**
+```powershell
+.\build\Release\dpi_engine_app.exe test_dpi.pcap output.pcap --verbose
+.\build\Release\dpi_mt.exe test_dpi.pcap output.pcap --block-app YouTube --verbose
 ```
 
 ---
